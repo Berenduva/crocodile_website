@@ -4,42 +4,77 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Crocodile Clusters — Map</title>
+
+<!-- Leaflet + MarkerCluster CSS -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" />
+
 <style>
+  /* ---------- BASIC PAGE LAYOUT ---------- */
   body{margin:0;font-family:system-ui,Segoe UI,Arial}
   header{padding:12px 16px;background:#0047b3;color:#fff}
   #controls{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:8px 0}
   #map{height:80vh;margin:12px;border-radius:12px;box-shadow:0 4px 10px rgba(0,0,0,.15)}
-  .legend{position:fixed;bottom:20px;left:20px;background:#fff;border:1px solid #bbb;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.15);padding:10px;font-size:12px;max-width:220px}
+
+  /* ---------- LEGEND BOX ---------- */
+  .legend{
+    position:fixed;bottom:20px;left:20px;
+    background:#fff;border:1px solid #bbb;border-radius:6px;
+    box-shadow:0 2px 6px rgba(0,0,0,.15);
+    padding:10px;font-size:12px;max-width:240px
+  }
   .legend b{display:block;margin-bottom:6px}
-  .chip{display:inline-block;padding:2px 6px;border-radius:10px;border:1px solid #ccc;margin:2px;font-size:11px;cursor:default}
+  .chip{display:inline-block;padding:2px 6px;border-radius:10px;border:1px solid #ccc;margin:2px;font-size:11px}
+
+  /* ---------- FILTER CONTROLS ---------- */
+  label{display:flex;align-items:center;gap:6px;color:#eaf2ff}
+  select,input{border-radius:6px;border:1px solid #cfd8e3;padding:6px}
+  button{border-radius:8px;border:1px solid #cfd8e3;padding:6px 10px;cursor:pointer}
+  #status{color:#e3f2ff}
 </style>
 </head>
 <body>
 <header>
   <h1 style="margin:0;font-size:18px;">🐊 Crocodile Clusters — Leaflet</h1>
+
+  <!-- ---------- FILTER CONTROLS ---------- -->
   <div id="controls">
     <label>Cluster:
       <select id="clusterFilter">
         <option value="">All</option>
       </select>
     </label>
+
     <label>Habitat:
       <select id="habitatFilter">
         <option value="">All</option>
       </select>
     </label>
-    <label>Country/Region:
+
+    <label>Status:
+      <select id="statusFilter">
+        <option value="">All</option>
+      </select>
+    </label>
+
+    <label>Species:
+      <input id="speciesFilter" type="text" placeholder="Common or scientific…">
+    </label>
+
+    <label>Country:
       <input id="countryFilter" type="text" placeholder="Type to filter…">
     </label>
+
     <button id="resetBtn">Reset</button>
-    <span id="status" style="color:#e3f2ff;">Loading…</span>
+    <span id="status">Loading…</span>
   </div>
 </header>
 
+<!-- ---------- MAP CONTAINER ---------- -->
 <div id="map"></div>
+
+<!-- ---------- LEGEND BOX ---------- -->
 <div class="legend" id="legend">
   <b>Legend – Clusters</b>
   <div id="legendItems"></div>
@@ -49,18 +84,31 @@
   </p>
 </div>
 
+<!-- Leaflet + MarkerCluster JS -->
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+
 <script>
-const statusEl = document.getElementById('status');
+/* ============================================================
+   BASIC MAP INITIALIZATION
+   ============================================================ */
+const statusEl   = document.getElementById('status');
 const clusterSel = document.getElementById('clusterFilter');
 const habitatSel = document.getElementById('habitatFilter');
-const countryInput = document.getElementById('countryFilter');
-const resetBtn = document.getElementById('resetBtn');
+const statusSel  = document.getElementById('statusFilter');
+const speciesInp = document.getElementById('speciesFilter');
+const countryInp = document.getElementById('countryFilter');
+const resetBtn   = document.getElementById('resetBtn');
 
+// Create Leaflet map
 const map = L.map('map', {center:[10,0], zoom:2, minZoom:2, maxZoom:8});
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap'}).addTo(map);
 
+// Add OpenStreetMap tiles
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+  attribution:'&copy; OpenStreetMap'
+}).addTo(map);
+
+// Color palette for clusters (20 colors)
 const colors = [
   '#e6194b','#3cb44b','#ffe119','#4363d8','#f58231',
   '#911eb4','#46f0f0','#f032e6','#bcf60c','#fabebe',
@@ -68,33 +116,40 @@ const colors = [
   '#aaffc3','#808000','#ffd8b1','#000075','#808080'
 ];
 
+// Store data + marker layer
 let rawFeatures = [];
 let markerLayer = L.markerClusterGroup();
 map.addLayer(markerLayer);
 
+/* ============================================================
+   HELPER FUNCTIONS
+   ============================================================ */
+
+// Assign color by cluster ID
 function clusterColor(clusterId){
   const idx = (parseInt(clusterId,10)-1) % colors.length;
   return colors[idx];
 }
 
-function makePopup(props){
+// HTML for popup when clicking marker
+function makePopup(p){
   return `
-    <b>${props.common_name || ''}</b> <i>(${props.scientific_name || ''})</i><br>
-    <b>Cluster:</b> ${props.cluster}<br>
-    <b>Conservation:</b> ${props.conservation_status || ''}<br>
-    <b>Habitat:</b> ${props.habitat_type || ''}<br>
-    <b>Length:</b> ${props.observed_length_m || '–'} m<br>
-    <b>Weight:</b> ${props.observed_weight_kg || '–'} kg<br>
-    <b>Country/Region:</b> ${props.country_region || ''}
+    <b>${p.common_name || ''}</b> <i>(${p.scientific_name || ''})</i><br>
+    <b>Cluster:</b> ${p.cluster}<br>
+    <b>Conservation:</b> ${p.conservation_status || ''}<br>
+    <b>Habitat:</b> ${p.habitat_type || ''}<br>
+    <b>Length:</b> ${p.observed_length_m || '–'} m<br>
+    <b>Weight:</b> ${p.observed_weight_kg || '–'} kg<br>
+    <b>Country/Region:</b> ${p.country_region || ''}
   `;
 }
 
+// Fit map bounds to markers (if any)
 function fitBoundsIfAny(bounds){
-  if(bounds.length){
-    map.fitBounds(bounds, {padding:[40,40]});
-  }
+  if(bounds.length) map.fitBounds(bounds, {padding:[40,40]});
 }
 
+// Unique + sorted values for filter dropdowns
 function uniqueSorted(arr){
   return Array.from(new Set(arr.filter(Boolean))).sort((a,b)=>{
     if(!isNaN(+a) && !isNaN(+b)) return (+a)-(+b);
@@ -102,14 +157,18 @@ function uniqueSorted(arr){
   });
 }
 
+// Fill dropdowns dynamically based on GeoJSON content
 function fillFilters(features){
   const clusters = uniqueSorted(features.map(f=>f.properties.cluster));
   const habitats = uniqueSorted(features.map(f=>f.properties.habitat_type));
+  const statuses = uniqueSorted(features.map(f=>f.properties.conservation_status));
 
   clusterSel.innerHTML = '<option value="">All</option>' + clusters.map(c=>`<option value="${c}">${c}</option>`).join('');
   habitatSel.innerHTML = '<option value="">All</option>' + habitats.map(h=>`<option value="${h}">${h}</option>`).join('');
+  statusSel.innerHTML  = '<option value="">All</option>' + statuses.map(s=>`<option value="${s}">${s}</option>`).join('');
 }
 
+// Build cluster legend (color chips)
 function buildLegend(features){
   const clusters = uniqueSorted(features.map(f=>f.properties.cluster));
   const legendItems = document.getElementById('legendItems');
@@ -119,9 +178,89 @@ function buildLegend(features){
   }).join(' ');
 }
 
-function passesFilter(props){
+// Simple debounce for text input (prevents lag when typing)
+function debounce(fn, ms=250){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
+
+/* ============================================================
+   FILTER LOGIC
+   ============================================================ */
+
+// Checks whether a feature passes all filters
+function passesFilter(p){
   const cVal = clusterSel.value;
   const hVal = habitatSel.value.trim().toLowerCase();
-  const countryVal = countryInput.value.trim().toLowerCase();
+  const sVal = statusSel.value.trim().toLowerCase();
+  const species = speciesInp.value.trim().toLowerCase();
+  const country = countryInp.value.trim().toLowerCase();
 
-  if(cVal && String
+  if(cVal && String(p.cluster)!==String(cVal)) return false;
+  if(hVal && String(p.habitat_type||'').toLowerCase()!==hVal) return false;
+  if(sVal && String(p.conservation_status||'').toLowerCase()!==sVal) return false;
+
+  if(species){
+    const hay = `${p.common_name||''} ${p.scientific_name||''}`.toLowerCase();
+    if(!hay.includes(species)) return false;
+  }
+  if(country){
+    if(!String(p.country_region||'').toLowerCase().includes(country)) return false;
+  }
+  return true;
+}
+
+// Renders markers based on active filters
+function renderMarkers(){
+  markerLayer.clearLayers();
+  const bounds = [];
+
+  rawFeatures.forEach(f=>{
+    const [lng,lat] = f.geometry.coordinates;
+    const p = f.properties || {};
+    if(!passesFilter(p)) return;
+
+    const m = L.circleMarker([lat,lng], {
+      radius:6, color:clusterColor(p.cluster),
+      fillColor:clusterColor(p.cluster), fillOpacity:0.7, weight:1
+    }).bindPopup(makePopup(p));
+
+    markerLayer.addLayer(m);
+    bounds.push([lat,lng]);
+  });
+
+  statusEl.textContent = `${markerLayer.getLayers().length} markers`;
+  fitBoundsIfAny(bounds);
+}
+
+/* ============================================================
+   EVENT LISTENERS FOR FILTERS
+   ============================================================ */
+clusterSel.addEventListener('change', renderMarkers);
+habitatSel.addEventListener('change', renderMarkers);
+statusSel.addEventListener('change', renderMarkers);
+speciesInp.addEventListener('input', debounce(renderMarkers, 200));
+countryInp.addEventListener('input', debounce(renderMarkers, 200));
+resetBtn.addEventListener('click', ()=>{
+  clusterSel.value = '';
+  habitatSel.value = '';
+  statusSel.value  = '';
+  speciesInp.value = '';
+  countryInp.value = '';
+  renderMarkers();
+});
+
+/* ============================================================
+   LOAD GEOJSON DATA
+   ============================================================ */
+// Load data/crocodiles.geojson and initialize map
+fetch('data/crocodiles.geojson')
+  .then(r => { if(!r.ok) throw new Error('Failed to load data/crocodiles.geojson'); return r.json(); })
+  .then(geo => {
+    rawFeatures = Array.isArray(geo.features) ? geo.features : [];
+    fillFilters(rawFeatures);
+    buildLegend(rawFeatures);
+    renderMarkers();
+  })
+  .catch(err => { console.error(err); statusEl.textContent='Failed to load GeoJSON.'; });
+</script>
+</body>
+</html>
+
