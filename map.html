@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Crocodile Clusters — Map</title>
+<title>Croco Map</title>
 
 <!-- Leaflet + MarkerCluster CSS -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
@@ -13,7 +13,7 @@
 <style>
   /* ---------- BASIC PAGE LAYOUT ---------- */
   body{margin:0;font-family:system-ui,Segoe UI,Arial}
-  header{padding:12px 16px;background:#0047b3;color:#fff}
+  header{padding:12px 16px;background:#2e7d32;color:#fff}
   #controls{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:8px 0}
   #map{height:80vh;margin:12px;border-radius:12px;box-shadow:0 4px 10px rgba(0,0,0,.15)}
 
@@ -23,6 +23,8 @@
     background:#fff;border:1px solid #bbb;border-radius:6px;
     box-shadow:0 2px 6px rgba(0,0,0,.15);
     padding:10px;font-size:12px;max-width:240px
+    max-height:35vh;   
+    overflow:auto;  
   }
   .legend b{display:block;margin-bottom:6px}
   .chip{display:inline-block;padding:2px 6px;border-radius:10px;border:1px solid #ccc;margin:2px;font-size:11px}
@@ -36,7 +38,7 @@
 </head>
 <body>
 <header>
-  <h1 style="margin:0;font-size:18px;">🐊 Crocodile Clusters — Leaflet</h1>
+  <h1 style="margin:0;font-size:18px;">🐊 Croco Map 🐊</h1>
 
   <!-- ---------- FILTER CONTROLS ---------- -->
   <div id="controls">
@@ -52,7 +54,7 @@
       </select>
     </label>
 
-    <label>Status:
+    <label>Conversation Status:
       <select id="statusFilter">
         <option value="">All</option>
       </select>
